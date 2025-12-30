@@ -7,12 +7,14 @@
 
 import SwiftUI
 
-// MARK: - Main App Structure
 @main
-struct SaleSpot: App {
+struct SaleSpotApp: App {
+    @StateObject private var dataManager = DataManager()
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(dataManager)
         }
     }
 }

@@ -6,6 +6,629 @@
 //
 
 import SwiftUI
+import MapKit
+import Foundation
+
+struct Event: Identifiable, Codable {
+    let id = UUID()
+    var title: String
+    var description: String
+    var location: CLLocationCoordinate2D  // GPS coordinates
+    var address: String                // Human-readable address
+    var startDate: Date
+    var endDate: Date
+    var category: EventCategory
+    var hostName: String
+    var hostContact: String           // Phone number or contact info
+    var isActive: Bool                // Is the sale currently happening?
+    var createdDate: Date             // When this event was posted
+    
+    // Different types of sales
+    enum EventCategory: String, CaseIterable, Codable {
+        case yardSale = "Yard Sale"
+        case garageSale = "Garage Sale"
+        case estateSale = "Estate Sale"
+        case movingSale = "Moving Sale"
+        case blockSale = "Block Sale"
+        case other = "Other"
+        
+        // Color for each category
+        var color: Color {
+            switch self {
+            case .yardSale: return .yellow
+            case .garageSale: return .blue
+            case .estateSale: return .purple
+            case .movingSale: return .green
+            case .blockSale: return .red
+            case .other: return .gray
+            }
+        }
+    }
+    
+    // Computed property to check if event is happening now
+    var isHappeningNow: Bool {
+        let now = Date()
+        return now >= startDate && now <= endDate && isActive
+    }
+    
+    // Computed property to check if event is upcoming
+    var isUpcoming: Bool {
+        return startDate > Date() && isActive
+    }
+    
+    // Computed property to check if event has ended
+    var hasEnded: Bool {
+        return endDate < Date()
+    }
+}
+
+// Make CLLocationCoordinate2D work with our Event struct
+extension CLLocationCoordinate2D: Codable {
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(latitude, forKey: .latitude)
+        try container.encode(longitude, forKey: .longitude)
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let latitude = try container.decode(Double.self, forKey: .latitude)
+        let longitude = try container.decode(Double.self, forKey: .longitude)
+        self.init(latitude: latitude, longitude: longitude)
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case latitude, longitude
+    }
+}
+
+struct UserProfile: Codable {
+    var name: String
+    var bio: String
+    var phoneNumber: String
+    var email: String
+    var joinedDate: Date
+    var socialLinks: [SocialLink]
+    
+    static let empty = UserProfile(
+        name: "",
+        bio: "",
+        phoneNumber: "",
+        email: "",
+        joinedDate: Date(),
+        socialLinks: []
+    )
+}
+
+struct SocialLink: Identifiable, Codable {
+    let id = UUID()
+    var platform: SocialPlatform
+    var url: String
+    
+    enum SocialPlatform: String, CaseIterable, Codable {
+        case instagram = "Instagram"
+        case facebook = "Facebook"
+        case twitter = "Twitter"
+        case tiktok = "TikTok"
+        case website = "Website"
+        case other = "Other"
+        
+        // Temporary icons for each social media platform
+        var icon: String {
+            switch self {
+            case .instagram: return "camera.fill"
+            case .facebook: return "f.square.fill"
+            case .twitter: return "bird.fill"
+            case .tiktok: return "music.note"
+            case .website: return "globe"
+            case .other: return "link"
+            }
+        }
+        
+        // Temporary color for each platform
+        var color: Color {
+            switch self {
+            case .instagram: return .purple
+            case .facebook: return .blue
+            case .twitter: return .cyan
+            case .tiktok: return .pink
+            case .website: return .green
+            case .other: return .gray
+            }
+        }
+    }
+}
+
+struct SocialLinkRow: View {
+    let link: SocialLink
+    let onDelete: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            
+            Button(action: {
+                openURL(link.url)
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: link.platform.icon)
+                        .font(.title3)
+                        .frame(width: 32)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(link.platform.rawValue)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Text(link.url)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .foregroundColor(.red)
+                    .padding(.leading, 8)
+            }
+        }
+        .padding(12)
+        .background(Color.white)
+        .cornerRadius(8)
+    }
+    
+    private func openURL(_ urlString: String) {
+        // Trim the URL
+        var cleanURL = urlString.trimmingCharacters(in: .whitespaces)
+        
+        if !cleanURL.hasPrefix("http://") && !cleanURL.hasPrefix("https://") {
+            cleanURL = "https://" + cleanURL
+        }
+        
+        // Attempt to open URL
+        if let url = URL(string: cleanURL) {
+            #if os(iOS)
+            UIApplication.shared.open(url)
+            #elseif os(macOS)
+            NSWorkspace.shared.open(url)
+            #endif
+        }
+    }
+}
+
+struct AddSocialLinkView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+    
+    @State private var selectedPlatform: SocialLink.SocialPlatform = .instagram
+    @State private var urlText = ""
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Platform") {
+                    Picker("Social Media", selection: $selectedPlatform) {
+                        ForEach(SocialLink.SocialPlatform.allCases, id: \.self) { platform in
+                            HStack {
+                                Image(systemName: platform.icon)
+                                Text(platform.rawValue)
+                            }
+                            .tag(platform)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+                
+                Section("Link") {
+                    TextField("Enter URL or username", text: $urlText)
+                        .keyboardType(.URL)
+                    
+                    Text("Example: instagram.com/yourname or @yourname")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .navigationTitle("Add Social Link")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        addLink()
+                    }
+                    .disabled(urlText.isEmpty)
+                }
+            }
+        }
+    }
+    
+    private func addLink() {
+        let newLink = SocialLink(platform: selectedPlatform, url: urlText)
+        dataManager.userProfile.socialLinks.append(newLink)
+        dismiss()
+    }
+}
+
+class DataManager: ObservableObject {
+    @Published var events: [Event] = []
+    @Published var userProfile = UserProfile.empty
+    
+    init() {
+        loadSampleData()
+    }
+    
+    private func loadSampleData() {
+        let now = Date()
+        let calendar = Calendar.current
+        
+        events = [
+            Event(
+                title: "Garage Sale",
+                description: "Furniture, electronics, and clothing",
+                location: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+                address: "123 Main St",
+                startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
+                endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
+                category: .garageSale,
+                hostName: "John Doe",
+                hostContact: "123-456-7890",
+                isActive: true,
+                createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
+            ),
+            Event(
+                title: "Block Sale",
+                description: "Toys, food, gardening supplies",
+                location: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+                address: "123 Hibiscus St",
+                startDate: calendar.date(byAdding: .hour, value: 1, to: now) ?? now,
+                endDate: calendar.date(byAdding: .hour, value: 3, to: now) ?? now,
+                category: .blockSale,
+                hostName: "Jane Doe",
+                hostContact: "123-670-7890",
+                isActive: true,
+                createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
+            ),
+            Event(
+                title: "Garage Sale",
+                description: "Furniture, electronics, and clothing",
+                location: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+                address: "123 Main St",
+                startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
+                endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
+                category: .garageSale,
+                hostName: "John Doe",
+                hostContact: "123-456-7890",
+                isActive: true,
+                createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
+            ),
+            Event(
+                title: "Garage Sale",
+                description: "Furniture, electronics, and clothing",
+                location: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+                address: "123 Main St",
+                startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
+                endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
+                category: .garageSale,
+                hostName: "John Doe",
+                hostContact: "123-456-7890",
+                isActive: true,
+                createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
+            ),
+            Event(
+                title: "Garage Sale",
+                description: "Furniture, electronics, and clothing",
+                location: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+                address: "123 Main St",
+                startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
+                endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
+                category: .garageSale,
+                hostName: "John Doe",
+                hostContact: "123-456-7890",
+                isActive: true,
+                createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
+            )
+        ]
+    }
+    
+    func addEvent(_ event: Event) {
+        events.append(event)
+    }
+    
+    func removeEvent(_ event: Event) {
+        events.removeAll { $0.id == event.id }
+    }
+    
+    func searchEvents(_ searchText: String) -> [Event] {
+        if searchText.isEmpty {
+            return events
+        }
+        return events.filter { event in
+            event.title.localizedCaseInsensitiveContains(searchText) ||
+            event.description.localizedCaseInsensitiveContains(searchText) ||
+            event.hostName.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+}
+
+struct SearchBar: View {
+    @Binding var text: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.gray)
+            
+            TextField("Search sales...", text: $text)
+            
+            if !text.isEmpty {
+                Button(action: {
+                    text = ""
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.gray)
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.gray.opacity(0.15))
+        .cornerRadius(10)
+    }
+}
+
+struct SaleCard: View {
+    let event: Event
+    @State private var showingDetail = false
+    
+    var body: some View {
+        Button(action: {
+            showingDetail = true
+        }) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Show category and status
+                HStack {
+                    HStack(spacing: 4) {
+                        Text(event.category.rawValue)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(event.category.color.opacity(0.2))
+                    .foregroundColor(event.category.color)
+                    .cornerRadius(6)
+                    
+                    Spacer()
+                    
+                    // Status
+                    if event.isHappeningNow {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 8, height: 8)
+                            Text("Live Now")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.green)
+                        }
+                    } else if event.isUpcoming {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 8, height: 8)
+                            Text("Upcoming")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                
+                // Title and description
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(event.title)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                    
+                    Text(event.description)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(3)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                
+                // Location and time info
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "location.fill")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Text(event.address)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .lineLimit(1)
+                    }
+                    
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.fill")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Text(formatTimeRange(start: event.startDate, end: event.endDate))
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
+                
+                // Host info
+                HStack {
+                    Image(systemName: "person.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    Text(event.hostName)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.gray.opacity(0.15))
+            }
+            .background(Color.gray.opacity(0.15))
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .sheet(isPresented: $showingDetail) {
+            EventDetailView(event: event)
+        }
+    }
+    
+    // Format date
+    private func formatTimeRange(start: Date, end: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        let startStr = formatter.string(from: start)
+        formatter.dateFormat = "h:mm a"
+        let endStr = formatter.string(from: end)
+        return "\(startStr) - \(endStr)"
+    }
+}
+
+struct EventDetailView: View {
+    let event: Event
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Category badge
+                    HStack(spacing: 8) {
+                        Text(event.category.rawValue)
+                            .fontWeight(.medium)
+                    }
+                    .font(.subheadline)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(event.category.color.opacity(0.2))
+                    .foregroundColor(event.category.color)
+                    .cornerRadius(8)
+                    
+                    Text(event.title)
+                        .font(.title)
+                        .fontWeight(.bold)
+                    
+                    if event.isHappeningNow {
+                        HStack {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 10, height: 10)
+                            Text("This sale is happening right now")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.green)
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    
+                    Text(event.description)
+                        .font(.body)
+                        .foregroundColor(.primary)
+                    
+                    Divider()
+                    
+                    // Details section
+                    VStack(alignment: .leading, spacing: 16) {
+                        DetailRow(icon: "location.fill", title: "Location", detail: event.address)
+                        
+                        DetailRow(icon: "clock.fill", title: "Time",
+                                detail: formatDateRange(start: event.startDate, end: event.endDate))
+                        
+                        DetailRow(icon: "person.fill", title: "Host", detail: event.hostName)
+                        
+                        DetailRow(icon: "phone.fill", title: "Contact", detail: event.hostContact)
+                    }
+                    
+                    Spacer()
+                }
+                .padding()
+            }
+            .navigationTitle("Sale Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func formatDateRange(start: Date, end: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        let startStr = formatter.string(from: start)
+        formatter.dateStyle = .none
+        let endStr = formatter.string(from: end)
+        return "\(startStr) - \(endStr)"
+    }
+}
+
+struct DetailRow: View {
+    let icon: String
+    let title: String
+    let detail: String
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundColor(.blue)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(detail)
+                    .font(.body)
+                    .foregroundColor(.primary)
+            }
+        }
+    }
+}
 
 // Content View (Main Container with Tab Navigation)
 struct ContentView: View {
@@ -70,28 +693,30 @@ struct MapView: View {
 }
 
 struct ExploreView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var searchText = ""
+    
+    var filteredEvents: [Event] {
+        dataManager.searchEvents(searchText)
+    }
+    
     var body: some View {
         NavigationView {
-            VStack {
-                Spacer()
+            VStack(spacing: 0) {
+                // Search Bar
+                SearchBar(text: $searchText)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
                 
-                VStack(spacing: 16) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 60))
-                        .foregroundColor(.gray)
-                    
-                    Text("Explore View")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                    
-                    Text("This is where we will show a scrollable list of sales!")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                // Scroll through Sale Cards
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        ForEach(filteredEvents) { event in
+                            SaleCard(event: event)
+                        }
+                    }
+                    .padding()
                 }
-                
-                Spacer()
             }
             .navigationTitle("Explore Sales")
         }
@@ -99,34 +724,93 @@ struct ExploreView: View {
 }
 
 struct ProfileView: View {
+    @EnvironmentObject var dataManager: DataManager
+    @State private var showingAddLink = false
+    
     var body: some View {
         NavigationView {
-            VStack {
-                Spacer()
-                
-                VStack(spacing: 16) {
-                    Image(systemName: "person.circle")
-                        .font(.system(size: 60))
-                        .foregroundColor(.gray)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Profile Info Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Profile Information")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        VStack(spacing: 12) {
+                            TextField("Name", text: $dataManager.userProfile.name)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            
+                            TextField("Bio", text: $dataManager.userProfile.bio, axis: .vertical)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .lineLimit(3...6)
+                            
+                            TextField("Phone Number", text: $dataManager.userProfile.phoneNumber)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .keyboardType(.phonePad)
+                            
+                            TextField("Email", text: $dataManager.userProfile.email)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .keyboardType(.emailAddress)
+                        }
+                    }
+                    .padding()
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(12)
                     
-                    Text("Profile View")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                    
-                    Text("This is where you'll manage your profile and create sales!")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                    // Social Links
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Text("Social Links")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                showingAddLink = true
+                            }) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        
+                        if dataManager.userProfile.socialLinks.isEmpty {
+                            Text("You have no social links yet. Add your Instagram, Facebook, or other links with the '+' button above.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .italic()
+                                .padding()
+                        } else {
+                            VStack(spacing: 12) {
+                                ForEach(dataManager.userProfile.socialLinks) { link in
+                                    SocialLinkRow(link: link, onDelete: {
+                                        deleteSocialLink(link)
+                                    })
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(12)
                 }
-                
-                Spacer()
+                .padding()
             }
             .navigationTitle("Profile")
+            .sheet(isPresented: $showingAddLink) {
+                AddSocialLinkView()
+            }
         }
+    }
+    
+    private func deleteSocialLink(_ link: SocialLink) {
+        dataManager.userProfile.socialLinks.removeAll { $0.id == link.id }
     }
 }
 
 #Preview {
     ContentView()
+        .environmentObject(DataManager())
 }
