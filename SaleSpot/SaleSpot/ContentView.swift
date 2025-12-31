@@ -8,6 +8,7 @@
 import SwiftUI
 import MapKit
 import Foundation
+import CoreLocation
 
 struct Event: Identifiable, Codable {
     let id = UUID()
@@ -79,6 +80,12 @@ extension CLLocationCoordinate2D: Codable {
     
     enum CodingKeys: String, CodingKey {
         case latitude, longitude
+    }
+}
+
+extension CLLocationCoordinate2D: Equatable {
+    public static func == (lhs: CLLocationCoordinate2D, rhs: CLLocationCoordinate2D) -> Bool {
+        return (lhs.latitude == rhs.latitude) && (lhs.longitude == rhs.longitude)
     }
 }
 
@@ -360,6 +367,44 @@ class DataManager: ObservableObject {
             event.title.localizedCaseInsensitiveContains(searchText) ||
             event.description.localizedCaseInsensitiveContains(searchText) ||
             event.hostName.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+}
+
+class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    private let locationManager = CLLocationManager()
+    
+    @Published var location: CLLocationCoordinate2D?
+    @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
+    
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        requestPermission()
+    }
+    
+    func requestPermission() {
+        locationManager.requestWhenInUseAuthorization()
+    }
+    
+    // When location updates
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let newLocation = locations.last else {
+            return
+        }
+        location = newLocation.coordinate
+    }
+    
+    // When location permission changes
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        authorizationStatus = manager.authorizationStatus
+        
+        if authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways {
+            locationManager.startUpdatingLocation()
+            print("Location permission granted")
+        } else if authorizationStatus == .denied {
+            print("Location permission denied")
         }
     }
 }
@@ -664,30 +709,48 @@ struct ContentView: View {
 // Placeholder Views
 
 struct MapView: View {
+    @StateObject private var locationManager = LocationManager()
+    
+    // Temporarily set default location to Apple Park
+    @State private var position: MapCameraPosition = .region(
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0090),
+            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+        )
+    )
+    
     var body: some View {
         NavigationView {
-            VStack {
-                Spacer()
-                
-                VStack(spacing: 16) {
-                    Image(systemName: "map")
-                        .font(.system(size: 60))
-                        .foregroundColor(.gray)
-                    
-                    Text("Map View")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                    
-                    Text("This is where we will show sales!")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+            ZStack {
+                Map(position: $position) {
+                    UserAnnotation()
                 }
-                
-                Spacer()
+                .ignoresSafeArea()
             }
-            .navigationTitle("Sales Near You")
+            .navigationTitle("Map")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if let userLocation = locationManager.location {
+                    position = .region(
+                        MKCoordinateRegion(
+                            center: userLocation,
+                            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                        )
+                    )
+                }
+            }
+            .onChange(of: locationManager.location) { _, newValue in
+                if let newValue = newValue {
+                    withAnimation {
+                        position = .region(
+                            MKCoordinateRegion(
+                                center: newValue,
+                                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 }
