@@ -286,8 +286,8 @@ class DataManager: ObservableObject {
             Event(
                 title: "Garage Sale",
                 description: "Furniture, electronics, and clothing",
-                location: CLLocationCoordinate2D(latitude: 0, longitude: 0),
-                address: "123 Main St",
+                location: CLLocationCoordinate2D(latitude: 37.3400, longitude: -122.0150),
+                address: "456 Stevens Creek Blvd, Cupertino, CA",
                 startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
                 category: .garageSale,
@@ -299,8 +299,8 @@ class DataManager: ObservableObject {
             Event(
                 title: "Block Sale",
                 description: "Toys, food, gardening supplies",
-                location: CLLocationCoordinate2D(latitude: 0, longitude: 0),
-                address: "123 Hibiscus St",
+                location: CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0090),
+                address: "Apple Park, Cupertino, CA",
                 startDate: calendar.date(byAdding: .hour, value: 1, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 3, to: now) ?? now,
                 category: .blockSale,
@@ -312,8 +312,8 @@ class DataManager: ObservableObject {
             Event(
                 title: "Garage Sale",
                 description: "Furniture, electronics, and clothing",
-                location: CLLocationCoordinate2D(latitude: 0, longitude: 0),
-                address: "123 Main St",
+                location: CLLocationCoordinate2D(latitude: 37.3300, longitude: -122.0030),
+                address: "789 De Anza Blvd, Cupertino, CA",
                 startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
                 category: .garageSale,
@@ -325,8 +325,8 @@ class DataManager: ObservableObject {
             Event(
                 title: "Garage Sale",
                 description: "Furniture, electronics, and clothing",
-                location: CLLocationCoordinate2D(latitude: 0, longitude: 0),
-                address: "123 Main St",
+                location: CLLocationCoordinate2D(latitude: 37.3380, longitude: -122.0050),
+                address: "Elm Street, Cupertino, CA",
                 startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
                 category: .garageSale,
@@ -338,8 +338,8 @@ class DataManager: ObservableObject {
             Event(
                 title: "Garage Sale",
                 description: "Furniture, electronics, and clothing",
-                location: CLLocationCoordinate2D(latitude: 0, longitude: 0),
-                address: "123 Main St",
+                location: CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0090),
+                address: "321 Homestead Rd, Cupertino, CA",
                 startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
                 category: .garageSale,
@@ -675,6 +675,239 @@ struct DetailRow: View {
     }
 }
 
+struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct SalePin: View {
+    let event: Event
+    let isSelected: Bool
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                // Pin background
+                Rectangle()
+                    .fill(isSelected ? event.category.color : event.category.color.opacity(0.8))
+                    .frame(width: isSelected ? 44 : 36, height: isSelected ? 44 : 36)
+                    .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                
+                // Pin symbol for type of event
+                Text(String(event.category.rawValue.prefix(1)))
+                    .font(.system(size: isSelected ? 20 : 16))
+                    .foregroundColor(.white)
+                    .fontWeight(.bold)
+                
+                // Show live events
+                if event.isHappeningNow {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 12, height: 12)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white, lineWidth: 2)
+                        )
+                        .offset(x: isSelected ? 18 : 14, y: isSelected ? -18 : -14)
+                }
+            }
+            
+            // Add triangle to pointer
+            Triangle()
+                .fill(isSelected ? event.category.color : event.category.color.opacity(0.8))
+                .frame(width: 12, height: 8)
+                .offset(y: -4)
+        }
+        .scaleEffect(isSelected ? 1.2 : 1.0)
+        .animation(.spring(response: 0.3), value: isSelected)
+    }
+}
+
+// Calculate distance between coordinates
+func distanceBetween(_ coord1: CLLocationCoordinate2D, _ coord2: CLLocationCoordinate2D) -> Double {
+    let location1 = CLLocation(latitude: coord1.latitude, longitude: coord1.longitude)
+    let location2 = CLLocation(latitude: coord2.latitude, longitude: coord2.longitude)
+    let distanceInMeters = location1.distance(from: location2)
+    let distanceInMiles = distanceInMeters / 1609.34 // Convert to miles
+    return distanceInMiles
+}
+
+struct MapStatsBar: View {
+    let eventCount: Int
+    
+    // Show number of sales nearby
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "map.fill")
+                .foregroundColor(.blue)
+            
+            Text("\(eventCount) sales nearby")
+                .font(.subheadline)
+                .fontWeight(.medium)
+            
+            Spacer()
+        }
+        .padding()
+        .background(Color.white)
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+    }
+}
+
+struct MapEventCard: View {
+    let event: Event
+    let onClose: () -> Void
+    @State private var showingFullDetail = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 40, height: 5)
+                .padding(.top, 8)
+            
+            // Card containing info
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    
+                    HStack(spacing: 4) {
+                        Text(event.category.rawValue)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(event.category.color.opacity(0.2))
+                    .foregroundColor(event.category.color)
+                    .cornerRadius(6)
+                    
+                    Spacer()
+                    
+                    // Close button
+                    Button(action: onClose) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                Text(event.title)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                
+                // Status
+                if event.isHappeningNow {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 8, height: 8)
+                        Text("Happening Now")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.green)
+                    }
+                }
+                
+                // Description preview
+                Text(event.description)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                
+                // Quick info
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "location.fill")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Text(event.address)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .lineLimit(1)
+                    }
+                    
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.fill")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Text(formatTime(event.startDate))
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    HStack(spacing: 6) {
+                        Image(systemName: "person.fill")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Text(event.hostName)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                // View details button
+                Button(action: {
+                    showingFullDetail = true
+                }) {
+                    HStack {
+                        Text("View Full Details")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        Spacer()
+                        
+                        Image(systemName: "arrow.right")
+                    }
+                    .padding()
+                    .background(event.category.color.opacity(0.15))
+                    .foregroundColor(event.category.color)
+                    .cornerRadius(8)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            .padding()
+        }
+        .background(Color.white)
+        .cornerRadius(20, corners: [.topLeft, .topRight])
+        .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: -5)
+        .sheet(isPresented: $showingFullDetail) {
+            EventDetailView(event: event)
+        }
+    }
+    
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        return formatter.string(from: date)
+    }
+}
+
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
+    }
+}
+
 // Content View (Main Container with Tab Navigation)
 struct ContentView: View {
     @State private var selectedTab = 0
@@ -706,12 +939,10 @@ struct ContentView: View {
     }
 }
 
-// Placeholder Views
-
 struct MapView: View {
     @StateObject private var locationManager = LocationManager()
+    @EnvironmentObject var dataManager: DataManager
     
-    // Temporarily set default location to Apple Park
     @State private var position: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0090),
@@ -719,13 +950,63 @@ struct MapView: View {
         )
     )
     
+    @State private var selectedEvent: Event?
+    
+    // Find events within radius
+    var nearbyEvents: [Event] {
+        guard let userLocation = locationManager.location else {
+            // Show all events if no location
+            return dataManager.events
+        }
+        
+        // Show events within 10 miles
+        let radiusMiles = 10.0
+        
+        return dataManager.events.filter { event in
+            let distance = distanceBetween(userLocation, event.location)
+            return distance <= radiusMiles
+        }
+    }
+    
     var body: some View {
         NavigationView {
             ZStack {
                 Map(position: $position) {
                     UserAnnotation()
+                    // Use nearbyEvents instead of all events
+                    ForEach(nearbyEvents) { event in
+                        Annotation(event.title, coordinate: event.location) {
+                            SalePin(event: event, isSelected: selectedEvent?.id == event.id)
+                                .onTapGesture {
+                                    withAnimation(.spring(response: 0.3)) {
+                                        selectedEvent = event
+                                    }
+                                }
+                        }
+                    }
                 }
                 .ignoresSafeArea()
+                
+                VStack {
+                    // Show number of nearby events
+                    MapStatsBar(eventCount: nearbyEvents.count)
+                        .padding()
+                    
+                    Spacer()
+                }
+                
+                if let event = selectedEvent {
+                    VStack {
+                        Spacer()
+                        
+                        MapEventCard(event: event, onClose: {
+                            withAnimation(.spring(response: 0.3)) {
+                                selectedEvent = nil
+                            }
+                        })
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             .navigationTitle("Map")
             .navigationBarTitleDisplayMode(.inline)
@@ -740,7 +1021,7 @@ struct MapView: View {
                 }
             }
             .onChange(of: locationManager.location) { _, newValue in
-                if let newValue = newValue {
+                if let newValue = newValue, selectedEvent == nil {
                     withAnimation {
                         position = .region(
                             MKCoordinateRegion(
