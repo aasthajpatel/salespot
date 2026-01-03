@@ -44,6 +44,17 @@ struct Event: Identifiable, Codable {
             case .other: return .gray
             }
         }
+        
+        var icon: String {
+            switch self {
+            case .yardSale: return "house"
+            case .garageSale: return "car"
+            case .estateSale: return "building.2"
+            case .movingSale: return "shippingbox"
+            case .blockSale: return "house.and.flag"
+            case .other: return "tag"
+            }
+        }
     }
     
     // Computed property to check if event is happening now
@@ -336,9 +347,9 @@ class DataManager: ObservableObject {
                 createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
             ),
             Event(
-                title: "Garage Sale",
+                title: "Estate Sale",
                 description: "Furniture, electronics, and clothing",
-                location: CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0090),
+                location: CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0080),
                 address: "321 Homestead Rd, Cupertino, CA",
                 startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
@@ -700,7 +711,7 @@ struct SalePin: View {
                     .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
                 
                 // Pin symbol for type of event
-                Text(String(event.category.rawValue.prefix(1)))
+                Image(systemName: event.category.icon)
                     .font(.system(size: isSelected ? 20 : 16))
                     .foregroundColor(.white)
                     .fontWeight(.bold)
