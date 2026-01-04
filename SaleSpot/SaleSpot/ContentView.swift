@@ -775,6 +775,7 @@ struct MapEventCard: View {
     let event: Event
     let onClose: () -> Void
     @State private var showingFullDetail = false
+    @EnvironmentObject var locationManager: LocationManager
     
     var body: some View {
         VStack(spacing: 0) {
@@ -831,16 +832,24 @@ struct MapEventCard: View {
                     .foregroundColor(.secondary)
                     .lineLimit(2)
                 
-                // Quick info
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Image(systemName: "location.fill")
                             .font(.caption)
                             .foregroundColor(.gray)
-                        Text(event.address)
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                            .lineLimit(1)
+                        
+                        if let userLocation = locationManager.location {
+                            let distance = distanceBetween(userLocation, event.location)
+                            Text("\(event.address) • \(String(format: "%.1f", distance)) mi away")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .lineLimit(1)
+                        } else {
+                            Text(event.address)
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .lineLimit(1)
+                        }
                     }
                     
                     HStack(spacing: 6) {
@@ -861,7 +870,7 @@ struct MapEventCard: View {
                             .foregroundColor(.gray)
                     }
                 }
-                
+            
                 // View details button
                 Button(action: {
                     showingFullDetail = true
@@ -1168,4 +1177,5 @@ struct ProfileView: View {
 #Preview {
     ContentView()
         .environmentObject(DataManager())
+        .environmentObject(LocationManager())
 }
