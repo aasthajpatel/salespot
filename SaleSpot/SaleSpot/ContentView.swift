@@ -1058,10 +1058,42 @@ struct MapView: View {
 
 struct ExploreView: View {
     @EnvironmentObject var dataManager: DataManager
+    @EnvironmentObject var locationManager: LocationManager
     @State private var searchText = ""
+    @State private var showingSortOptions = false
+    @State private var selectedSortOption: SortOption = .distance
+    @State private var selectedCategoryFilter: Event.EventCategory? = nil
     
-    var filteredEvents: [Event] {
-        dataManager.searchEvents(searchText)
+    enum SortOption: String, CaseIterable {
+        case distance = "Distance"
+        case date = "Date"
+        case none = "None"
+    }
+    
+    var filteredAndSortedEvents: [Event] {
+        var events = dataManager.searchEvents(searchText)
+        
+        if let category = selectedCategoryFilter {
+            events = events.filter { $0.category == category }
+        }
+        
+        // Apply sorting
+        switch selectedSortOption {
+        case .distance:
+            if let userLocation = locationManager.location {
+                events = events.sorted { event1, event2 in
+                    let dist1 = distanceBetween(userLocation, event1.location)
+                    let dist2 = distanceBetween(userLocation, event2.location)
+                    return dist1 < dist2
+                }
+            }
+        case .date:
+            events = events.sorted { $0.startDate < $1.startDate }
+        case .none:
+            break
+        }
+        
+        return events
     }
     
     var body: some View {
@@ -1072,10 +1104,71 @@ struct ExploreView: View {
                     .padding(.horizontal)
                     .padding(.top, 8)
                 
+                // Filter and Sort
+                HStack(spacing: 12) {
+                    Button(action: {
+                        showingSortOptions = true
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.up.arrow.down")
+                            Text("Sort: \(selectedSortOption.rawValue)")
+                                .font(.subheadline)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.gray.opacity(0.15))
+                        .foregroundColor(.primary)
+                        .cornerRadius(8)
+                    }
+                    
+                    // Filter Menu
+                    Menu {
+                        Button("All Categories") {
+                            selectedCategoryFilter = nil
+                        }
+                        
+                        Divider()
+                        
+                        ForEach(Event.EventCategory.allCases, id: \.self) { category in
+                            Button(action: {
+                                selectedCategoryFilter = category
+                            }) {
+                                HStack {
+                                    Image(systemName: category.icon)
+                                    Text(category.rawValue)
+                                    if selectedCategoryFilter == category {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "line.3.horizontal.decrease.circle")
+                            Text(selectedCategoryFilter?.rawValue ?? "All")
+                                .font(.subheadline)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(selectedCategoryFilter != nil ? Color.blue.opacity(0.15) : Color.gray.opacity(0.15))
+                        .foregroundColor(selectedCategoryFilter != nil ? .blue : .primary)
+                        .cornerRadius(8)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("\(filteredAndSortedEvents.count) sales")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                
                 // Scroll through Sale Cards
                 ScrollView {
                     LazyVStack(spacing: 16) {
-                        ForEach(filteredEvents) { event in
+                        ForEach(filteredAndSortedEvents) { event in
                             SaleCard(event: event)
                         }
                     }
@@ -1083,6 +1176,14 @@ struct ExploreView: View {
                 }
             }
             .navigationTitle("Explore Sales")
+            .confirmationDialog("Sort By", isPresented: $showingSortOptions, titleVisibility: .visible) {
+                ForEach(SortOption.allCases, id: \.self) { option in
+                    Button(option.rawValue) {
+                        selectedSortOption = option
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
         }
     }
 }
