@@ -928,6 +928,134 @@ struct RoundedCorner: Shape {
     }
 }
 
+struct ProfileRow: View {
+    let icon: String
+    let label: String
+    let value: String
+    let isEmpty: Bool
+    let onEdit: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundColor(.blue)
+                .frame(width: 24)
+            
+            // Label and Value
+            VStack(alignment: .leading, spacing: 4) {
+                Text(label)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Text(value)
+                    .font(.body)
+                    .foregroundColor(isEmpty ? .gray : .primary)
+                    .italic(isEmpty)
+            }
+            
+            Spacer()
+            
+            // Edit button
+            Button(action: onEdit) {
+                Image(systemName: "pencil.circle.fill")
+                    .font(.title3)
+                    .foregroundColor(.blue)
+            }
+        }
+        .padding()
+        .background(Color.white)
+        .cornerRadius(8)
+    }
+}
+
+struct EditProfileFieldView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+    
+    let field: ProfileView.ProfileField
+    
+    @State private var textValue = ""
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    switch field {
+                    case .name:
+                        TextField("Enter your name", text: $textValue)
+                    case .bio:
+                        TextField("Tell us about yourself", text: $textValue, axis: .vertical)
+                            .lineLimit(3...6)
+                    case .phone:
+                        TextField("Enter phone number", text: $textValue)
+                            .keyboardType(.phonePad)
+                    case .email:
+                        TextField("Enter email address", text: $textValue)
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                    }
+                }
+            }
+            .navigationTitle("Edit \(fieldTitle)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveField()
+                    }
+                }
+            }
+            .onAppear {
+                switch field {
+                case .name:
+                    textValue = dataManager.userProfile.name
+                case .bio:
+                    textValue = dataManager.userProfile.bio
+                case .phone:
+                    textValue = dataManager.userProfile.phoneNumber
+                case .email:
+                    textValue = dataManager.userProfile.email
+                }
+            }
+        }
+    }
+    
+    private var fieldTitle: String {
+        switch field {
+        case .name: return "Name"
+        case .bio: return "Bio"
+        case .phone: return "Phone"
+        case .email: return "Email"
+        }
+    }
+    
+    private func saveField() {
+        switch field {
+        case .name:
+            dataManager.userProfile.name = textValue
+        case .bio:
+            dataManager.userProfile.bio = textValue
+        case .phone:
+            dataManager.userProfile.phoneNumber = textValue
+        case .email:
+            dataManager.userProfile.email = textValue
+        }
+        dismiss()
+    }
+}
+
+extension ProfileView.ProfileField: Identifiable {
+    var id: Self { self }
+}
+
 // Content View (Main Container with Tab Navigation)
 struct ContentView: View {
     @State private var selectedTab = 0
@@ -1191,6 +1319,11 @@ struct ExploreView: View {
 struct ProfileView: View {
     @EnvironmentObject var dataManager: DataManager
     @State private var showingAddLink = false
+    @State private var editingField: ProfileField? = nil
+    
+    enum ProfileField {
+        case name, bio, phone, email
+    }
     
     var body: some View {
         NavigationView {
@@ -1202,21 +1335,38 @@ struct ProfileView: View {
                             .font(.title2)
                             .fontWeight(.bold)
                         
-                        VStack(spacing: 12) {
-                            TextField("Name", text: $dataManager.userProfile.name)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                        VStack(spacing: 16) {
+                            ProfileRow(
+                                icon: "person.fill",
+                                label: "Name",
+                                value: dataManager.userProfile.name.isEmpty ? "Add your name" : dataManager.userProfile.name,
+                                isEmpty: dataManager.userProfile.name.isEmpty,
+                                onEdit: { editingField = .name }
+                            )
                             
-                            TextField("Bio", text: $dataManager.userProfile.bio, axis: .vertical)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .lineLimit(3...6)
+                            ProfileRow(
+                                icon: "text.alignleft",
+                                label: "Bio",
+                                value: dataManager.userProfile.bio.isEmpty ? "Add a bio" : dataManager.userProfile.bio,
+                                isEmpty: dataManager.userProfile.bio.isEmpty,
+                                onEdit: { editingField = .bio }
+                            )
                             
-                            TextField("Phone Number", text: $dataManager.userProfile.phoneNumber)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .keyboardType(.phonePad)
+                            ProfileRow(
+                                icon: "phone.fill",
+                                label: "Phone",
+                                value: dataManager.userProfile.phoneNumber.isEmpty ? "Add phone number" : dataManager.userProfile.phoneNumber,
+                                isEmpty: dataManager.userProfile.phoneNumber.isEmpty,
+                                onEdit: { editingField = .phone }
+                            )
                             
-                            TextField("Email", text: $dataManager.userProfile.email)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .keyboardType(.emailAddress)
+                            ProfileRow(
+                                icon: "envelope.fill",
+                                label: "Email",
+                                value: dataManager.userProfile.email.isEmpty ? "Add email" : dataManager.userProfile.email,
+                                isEmpty: dataManager.userProfile.email.isEmpty,
+                                onEdit: { editingField = .email }
+                            )
                         }
                     }
                     .padding()
@@ -1266,6 +1416,9 @@ struct ProfileView: View {
             .navigationTitle("Profile")
             .sheet(isPresented: $showingAddLink) {
                 AddSocialLinkView()
+            }
+            .sheet(item: $editingField) { field in
+                EditProfileFieldView(field: field)
             }
         }
     }
