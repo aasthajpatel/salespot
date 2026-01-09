@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CD733F542F10B6DA00139CF2 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = CD733F532F10B6DA00139CF2 /* FirebaseAuth */; };
+		CD733F562F10B6DA00139CF2 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = CD733F552F10B6DA00139CF2 /* FirebaseFirestore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		CDF729CE2E51494F00F68C40 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +57,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CD733F542F10B6DA00139CF2 /* FirebaseAuth in Frameworks */,
+				CD733F562F10B6DA00139CF2 /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +119,8 @@
 			);
 			name = SaleSpot;
 			packageProductDependencies = (
+				CD733F532F10B6DA00139CF2 /* FirebaseAuth */,
+				CD733F552F10B6DA00139CF2 /* FirebaseFirestore */,
 			);
 			productName = SaleSpot;
 			productReference = CDF729BF2E51494C00F68C40 /* SaleSpot.app */;
@@ -195,6 +204,9 @@
 			);
 			mainGroup = CDF729B62E51494C00F68C40;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CD733F522F10B6DA00139CF2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CDF729C02E51494C00F68C40 /* Products */;
 			projectDirPath = "";
@@ -601,6 +613,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CD733F522F10B6DA00139CF2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.7.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CD733F532F10B6DA00139CF2 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CD733F522F10B6DA00139CF2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		CD733F552F10B6DA00139CF2 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CD733F522F10B6DA00139CF2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = CDF729B72E51494C00F68C40 /* Project object */;
 }

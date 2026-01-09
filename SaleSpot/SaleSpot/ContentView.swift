@@ -1318,6 +1318,7 @@ struct ExploreView: View {
 
 struct ProfileView: View {
     @EnvironmentObject var dataManager: DataManager
+    @EnvironmentObject var authManager: AuthManager  // ADD THIS
     @State private var showingAddLink = false
     @State private var editingField: ProfileField? = nil
     
@@ -1329,6 +1330,21 @@ struct ProfileView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
+                    // Sign Out Button
+                    Button(action: {
+                        authManager.signOut()
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.right.square")
+                            Text("Sign Out")
+                        }
+                        .foregroundColor(.red)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(10)
+                    }
+                    
                     // Profile Info Section
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Profile Information")
@@ -1432,4 +1448,5 @@ struct ProfileView: View {
     ContentView()
         .environmentObject(DataManager())
         .environmentObject(LocationManager())
+        .environmentObject(AuthManager())
 }
