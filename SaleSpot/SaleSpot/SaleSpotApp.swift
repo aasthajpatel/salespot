@@ -26,6 +26,7 @@ struct SaleSpotApp: App {
             } else {
                 AuthenticationView()
                     .environmentObject(authManager)
+                    .environmentObject(dataManager)
             }
         }
     }

@@ -44,10 +44,12 @@ class AuthManager: ObservableObject {
 struct AuthenticationView: View {
     @State private var email = ""
     @State private var password = ""
+    @State private var name = ""
     @State private var isSignUp = false
     @State private var errorMessage = ""
     @State private var showError = false
     @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var dataManager: DataManager
     
     var body: some View {
         VStack(spacing: 20) {
@@ -69,8 +71,14 @@ struct AuthenticationView: View {
             }
             .padding(.bottom, 40)
             
-            // Email and Password Fields
+            // Forms
             VStack(spacing: 16) {
+                // Name field
+                if isSignUp {
+                    TextField("Full Name", text: $name)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                }
+                
                 TextField("Email", text: $email)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .keyboardType(.emailAddress)
@@ -93,7 +101,7 @@ struct AuthenticationView: View {
                     .cornerRadius(10)
             }
             .padding(.horizontal, 32)
-            .disabled(email.isEmpty || password.isEmpty)
+            .disabled(email.isEmpty || password.isEmpty || (isSignUp && name.isEmpty))
             
             // Toggle Sign In & Sign Up
             Button(action: {
@@ -130,6 +138,10 @@ struct AuthenticationView: View {
                 if let error = error {
                     errorMessage = error.localizedDescription
                     showError = true
+                }
+                else {
+                    dataManager.userProfile.name = name
+                    dataManager.userProfile.email = email
                 }
             }
         } else {
