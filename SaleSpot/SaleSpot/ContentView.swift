@@ -9,6 +9,8 @@ import SwiftUI
 import MapKit
 import Foundation
 import CoreLocation
+import FirebaseFirestore
+import FirebaseAuth
 
 struct Event: Identifiable, Codable {
     let id = UUID()
@@ -284,9 +286,67 @@ struct AddSocialLinkView: View {
 class DataManager: ObservableObject {
     @Published var events: [Event] = []
     @Published var userProfile = UserProfile.empty
+
+    private let db = Firestore.firestore()
+    private var userId: String?
+      
     
     init() {
+        Auth.auth().addStateDidChangeListener { [weak self] _, user in self?.userId = user?.uid
+            if let userId = user?.uid {
+                self?.loadUserProfile(userId: userId)
+            } else {
+                self?.userProfile = UserProfile.empty
+            }
+        }
         loadSampleData()
+    }
+    
+    func loadUserProfile(userId: String) {
+        db.collection("users").document(userId).getDocument { [weak self] snapshot, error in
+            if let error = error {
+                print("Error loading profile: \(error)")
+                return
+            }
+            
+            if let data = snapshot?.data() {
+                // Profile exists - load it
+                DispatchQueue.main.async {
+                    self?.userProfile = UserProfile(
+                        name: data["name"] as? String ?? "",
+                        bio: data["bio"] as? String ?? "",
+                        phoneNumber: data["phoneNumber"] as? String ?? "",
+                        email: data["email"] as? String ?? "",
+                        joinedDate: (data["joinedDate"] as? Timestamp)?.dateValue() ?? Date(),
+                        socialLinks: [] // Will implement later
+                    )
+                }
+            } else {
+                // No profile yet - create empty one
+                self?.userProfile = UserProfile.empty
+            }
+        }
+    }
+    
+    // Save user profile to Firestore
+    func saveUserProfile() {
+        guard let userId = userId else { return }
+        
+        let profileData: [String: Any] = [
+            "name": userProfile.name,
+            "bio": userProfile.bio,
+            "phoneNumber": userProfile.phoneNumber,
+            "email": userProfile.email,
+            "joinedDate": Timestamp(date: userProfile.joinedDate)
+        ]
+        
+        db.collection("users").document(userId).setData(profileData, merge: true) { error in
+            if let error = error {
+                print("Error saving profile: \(error)")
+            } else {
+                print("✅ Profile saved successfully")
+            }
+        }
     }
     
     private func loadSampleData() {
@@ -1048,6 +1108,7 @@ struct EditProfileFieldView: View {
         case .email:
             dataManager.userProfile.email = textValue
         }
+        dataManager.saveUserProfile()
         dismiss()
     }
 }

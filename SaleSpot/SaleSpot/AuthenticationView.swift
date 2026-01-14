@@ -142,9 +142,12 @@ struct AuthenticationView: View {
                 else {
                     dataManager.userProfile.name = name
                     dataManager.userProfile.email = email
+                    dataManager.userProfile.joinedDate = Date()
+                    dataManager.saveUserProfile()
                 }
             }
-        } else {
+        }
+        else {
             authManager.signIn(email: email, password: password) { error in
                 if let error = error {
                     errorMessage = error.localizedDescription

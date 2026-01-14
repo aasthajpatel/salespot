@@ -12,6 +12,7 @@ import FirebaseCore
 struct SaleSpotApp: App {
     @StateObject private var dataManager = DataManager()
     @StateObject private var authManager = AuthManager()
+    @StateObject private var locationManager = LocationManager()
     
     init() {
         FirebaseApp.configure()
@@ -23,10 +24,12 @@ struct SaleSpotApp: App {
                 ContentView()
                     .environmentObject(dataManager)
                     .environmentObject(authManager)
+                    .environmentObject(locationManager)
             } else {
                 AuthenticationView()
                     .environmentObject(authManager)
                     .environmentObject(dataManager)
+                    .environmentObject(locationManager)
             }
         }
     }
