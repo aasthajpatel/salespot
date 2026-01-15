@@ -21,6 +21,7 @@ struct Event: Identifiable, Codable {
     var startDate: Date
     var endDate: Date
     var category: EventCategory
+    var hostId: String                // Associates events with user
     var hostName: String
     var hostContact: String           // Phone number or contact info
     var isActive: Bool                // Is the sale currently happening?
@@ -362,6 +363,7 @@ class DataManager: ObservableObject {
                 startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
                 category: .garageSale,
+                hostId: "sample",
                 hostName: "John Doe",
                 hostContact: "123-456-7890",
                 isActive: true,
@@ -375,6 +377,7 @@ class DataManager: ObservableObject {
                 startDate: calendar.date(byAdding: .hour, value: 1, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 3, to: now) ?? now,
                 category: .blockSale,
+                hostId: "sample",
                 hostName: "Jane Doe",
                 hostContact: "123-670-7890",
                 isActive: true,
@@ -388,6 +391,7 @@ class DataManager: ObservableObject {
                 startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
                 category: .garageSale,
+                hostId: "sample",
                 hostName: "John Doe",
                 hostContact: "123-456-7890",
                 isActive: true,
@@ -401,6 +405,7 @@ class DataManager: ObservableObject {
                 startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
                 category: .garageSale,
+                hostId: "sample",
                 hostName: "John Doe",
                 hostContact: "123-456-7890",
                 isActive: true,
@@ -414,6 +419,7 @@ class DataManager: ObservableObject {
                 startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
                 endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
                 category: .garageSale,
+                hostId: "sample",
                 hostName: "John Doe",
                 hostContact: "123-456-7890",
                 isActive: true,
@@ -634,6 +640,88 @@ struct SaleCard: View {
         formatter.dateFormat = "h:mm a"
         let endStr = formatter.string(from: end)
         return "\(startStr) - \(endStr)"
+    }
+}
+
+struct MyEventCard: View {
+    let event: Event
+    @EnvironmentObject var dataManager: DataManager
+    @State private var showingDetail = false
+    @State private var showingDeleteAlert = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(event.category.rawValue)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(event.category.color.opacity(0.2))
+                    .foregroundColor(event.category.color)
+                    .cornerRadius(6)
+                
+                Spacer()
+                
+                if event.isHappeningNow {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 8, height: 8)
+                        Text("Live Now")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.green)
+                    }
+                }
+            }
+            
+            Text(event.title)
+                .font(.headline)
+                .fontWeight(.semibold)
+            
+            Text(event.address)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            HStack {
+                Button(action: {
+                    showingDetail = true
+                }) {
+                    Text("View Details")
+                        .font(.caption)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(6)
+                }
+                
+                Spacer()
+                
+                Button(action: {
+                    showingDeleteAlert = true
+                }) {
+                    Image(systemName: "trash")
+                        .foregroundColor(.red)
+                }
+            }
+        }
+        .padding()
+        .background(Color.white)
+        .cornerRadius(10)
+        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .sheet(isPresented: $showingDetail) {
+            EventDetailView(event: event)
+        }
+        .alert("Delete Event", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                dataManager.removeEvent(event)
+            }
+        } message: {
+            Text("Are you sure you want to delete this event? This action cannot be undone.")
+        }
     }
 }
 
@@ -1382,9 +1470,15 @@ struct ProfileView: View {
     @EnvironmentObject var authManager: AuthManager  // ADD THIS
     @State private var showingAddLink = false
     @State private var editingField: ProfileField? = nil
+    @State private var showingAddEvent = false
     
     enum ProfileField {
         case name, bio, phone, email
+    }
+    
+    var myEvents: [Event] {
+           guard let userId = authManager.user?.uid else { return [] }
+           return dataManager.events.filter { $0.hostId == userId }
     }
     
     var body: some View {
@@ -1450,6 +1544,42 @@ struct ProfileView: View {
                     .background(Color.gray.opacity(0.1))
                     .cornerRadius(12)
                     
+                    // My Events
+                    VStack(alignment: .leading, spacing: 16) {
+                           HStack {
+                               Text("My Events")
+                                   .font(.title2)
+                                   .fontWeight(.bold)
+                               
+                               Spacer()
+                               
+                               Button(action: {
+                                   showingAddEvent = true
+                               }) {
+                                   Image(systemName: "plus.circle.fill")
+                                       .font(.title2)
+                                       .foregroundColor(.blue)
+                               }
+                           }
+                           
+                           if myEvents.isEmpty {
+                               Text("You haven't created any events yet. Tap the '+' button to create your first sale!")
+                                   .font(.subheadline)
+                                   .foregroundColor(.secondary)
+                                   .italic()
+                                   .padding()
+                           } else {
+                               VStack(spacing: 12) {
+                                   ForEach(myEvents) { event in
+                                       MyEventCard(event: event)
+                                   }
+                               }
+                           }
+                    }
+                   .padding()
+                   .background(Color.green.opacity(0.1))
+                   .cornerRadius(12)
+                    
                     // Social Links
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
@@ -1497,11 +1627,135 @@ struct ProfileView: View {
             .sheet(item: $editingField) { field in
                 EditProfileFieldView(field: field)
             }
+            .sheet(isPresented: $showingAddEvent) {
+                            AddEventView()
+            }
         }
     }
     
     private func deleteSocialLink(_ link: SocialLink) {
         dataManager.userProfile.socialLinks.removeAll { $0.id == link.id }
+    }
+}
+
+struct AddEventView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: DataManager
+    @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var locationManager: LocationManager
+    
+    @State private var title = ""
+    @State private var description = ""
+    @State private var address = ""
+    @State private var selectedCategory: Event.EventCategory = .garageSale
+    @State private var startDate = Date()
+    @State private var endDate = Date().addingTimeInterval(4 * 3600) // 4 hours later
+    @State private var showError = false
+    @State private var errorMessage = ""
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Event Details") {
+                    TextField("Title", text: $title)
+                        .autocorrectionDisabled()
+                    
+                    TextField("Description", text: $description, axis: .vertical)
+                        .lineLimit(3...6)
+                    
+                    Picker("Category", selection: $selectedCategory) {
+                        ForEach(Event.EventCategory.allCases, id: \.self) { category in
+                            HStack {
+                                Image(systemName: category.icon)
+                                Text(category.rawValue)
+                            }
+                            .tag(category)
+                        }
+                    }
+                }
+                
+                Section("Location") {
+                    TextField("Address", text: $address)
+                        .autocorrectionDisabled()
+                }
+                
+                Section("Time") {
+                    DatePicker("Start Time", selection: $startDate, displayedComponents: [.date, .hourAndMinute])
+                    DatePicker("End Time", selection: $endDate, displayedComponents: [.date, .hourAndMinute])
+                }
+                
+                Section("Contact Information") {
+                    if !dataManager.userProfile.phoneNumber.isEmpty {
+                        HStack {
+                            Text("Phone")
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(dataManager.userProfile.phoneNumber)
+                        }
+                    } else {
+                        Text("Add a phone number in your profile to help buyers contact you")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
+            }
+            .navigationTitle("Create Event")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        createEvent()
+                    }
+                    .disabled(!isFormValid)
+                }
+            }
+            .alert("Error", isPresented: $showError) {
+                Button("OK") {}
+            } message: {
+                Text(errorMessage)
+            }
+        }
+    }
+    
+    private var isFormValid: Bool {
+        !title.isEmpty &&
+        !description.isEmpty &&
+        !address.isEmpty
+    }
+    
+    private func createEvent() {
+        guard let userId = authManager.user?.uid else {
+            errorMessage = "You must be logged in to create an event"
+            showError = true
+            return
+        }
+        
+        // Use current location if available, otherwise use Apple Park
+        let eventLocation = locationManager.location ?? CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0090)
+        
+        let newEvent = Event(
+            title: title,
+            description: description,
+            location: eventLocation,
+            address: address,
+            startDate: startDate,
+            endDate: endDate,
+            category: selectedCategory,
+            hostId: userId,
+            hostName: dataManager.userProfile.name.isEmpty ? "Anonymous" : dataManager.userProfile.name,
+            hostContact: dataManager.userProfile.phoneNumber,
+            isActive: true,
+            createdDate: Date()
+        )
+        
+        dataManager.addEvent(newEvent)
+        dismiss()
     }
 }
 
