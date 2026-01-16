@@ -13,7 +13,7 @@ import FirebaseFirestore
 import FirebaseAuth
 
 struct Event: Identifiable, Codable {
-    let id = UUID()
+    var id: UUID = UUID()
     var title: String
     var description: String
     var location: CLLocationCoordinate2D  // GPS coordinates
@@ -290,17 +290,86 @@ class DataManager: ObservableObject {
 
     private let db = Firestore.firestore()
     private var userId: String?
+    private var eventsListener: ListenerRegistration?
       
     
     init() {
-        Auth.auth().addStateDidChangeListener { [weak self] _, user in self?.userId = user?.uid
+        Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            self?.userId = user?.uid
             if let userId = user?.uid {
                 self?.loadUserProfile(userId: userId)
-            } else {
+            }
+            else {
                 self?.userProfile = UserProfile.empty
             }
         }
-        loadSampleData()
+        
+        listenToEvents()
+    }
+    
+    deinit {
+        eventsListener?.remove()
+    }
+    
+    func listenToEvents() {
+        eventsListener = db.collection("events")
+            .whereField("isActive", isEqualTo: true)
+            .addSnapshotListener { [weak self] snapshot, error in
+                if let error = error {
+                    print("Error loading events: \(error)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    print("No events found")
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    self?.events = documents.compactMap { doc -> Event? in
+                        let data = doc.data()
+                        
+                        guard
+                            let title = data["title"] as? String,
+                            let description = data["description"] as? String,
+                            let geoPoint = data["location"] as? GeoPoint,
+                            let address = data["address"] as? String,
+                            let startTimestamp = data["startDate"] as? Timestamp,
+                            let endTimestamp = data["endDate"] as? Timestamp,
+                            let categoryString = data["category"] as? String,
+                            let category = Event.EventCategory(rawValue: categoryString),
+                            let hostId = data["hostId"] as? String,
+                            let hostName = data["hostName"] as? String,
+                            let hostContact = data["hostContact"] as? String,
+                            let isActive = data["isActive"] as? Bool,
+                            let createdTimestamp = data["createdDate"] as? Timestamp
+                        else {
+                            print("Failed to parse event: \(doc.documentID)")
+                            return nil
+                        }
+                        
+                        return Event(
+                            id: UUID(uuidString: doc.documentID) ?? UUID(),
+                            title: title,
+                            description: description,
+                            location: CLLocationCoordinate2D(
+                                latitude: geoPoint.latitude,
+                                longitude: geoPoint.longitude
+                            ),
+                            address: address,
+                            startDate: startTimestamp.dateValue(),
+                            endDate: endTimestamp.dateValue(),
+                            category: category,
+                            hostId: hostId,
+                            hostName: hostName,
+                            hostContact: hostContact,
+                            isActive: isActive,
+                            createdDate: createdTimestamp.dateValue()
+                        )
+                    }
+                    print("Loaded \(self?.events.count ?? 0) events from Firestore")
+                }
+            }
     }
     
     func loadUserProfile(userId: String) {
@@ -429,11 +498,39 @@ class DataManager: ObservableObject {
     }
     
     func addEvent(_ event: Event) {
-        events.append(event)
+        let eventData: [String: Any] = [
+            "title": event.title,
+            "description": event.description,
+            "location": GeoPoint(latitude: event.location.latitude, longitude: event.location.longitude),
+            "address": event.address,
+            "startDate": Timestamp(date: event.startDate),
+            "endDate": Timestamp(date: event.endDate),
+            "category": event.category.rawValue,
+            "hostId": event.hostId,
+            "hostName": event.hostName,
+            "hostContact": event.hostContact,
+            "isActive": event.isActive,
+            "createdDate": Timestamp(date: event.createdDate)
+        ]
+        
+        db.collection("events").document(event.id.uuidString).setData(eventData) { error in
+            if let error = error {
+                print("Error saving event: \(error)")
+            } else {
+                print("Event saved successfully")
+            }
+        }
     }
     
     func removeEvent(_ event: Event) {
-        events.removeAll { $0.id == event.id }
+        db.collection("events").document(event.id.uuidString).delete { error in
+            if let error = error {
+                print("Error deleting event: \(error)")
+            }
+            else {
+                print("Event deleted successfully")
+            }
+        }
     }
     
     func searchEvents(_ searchText: String) -> [Event] {
