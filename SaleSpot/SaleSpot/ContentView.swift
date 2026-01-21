@@ -380,6 +380,17 @@ class DataManager: ObservableObject {
             }
             
             if let data = snapshot?.data() {
+                // Load social links
+                let socialLinksData = data["socialLinks"] as? [[String: String]] ?? []
+                let socialLinks = socialLinksData.compactMap { linkData -> SocialLink? in
+                    guard
+                        let platformString = linkData["platform"],
+                        let platform = SocialLink.SocialPlatform(rawValue: platformString),
+                        let url = linkData["url"]
+                    else { return nil }
+                    
+                    return SocialLink(platform: platform, url: url)
+                }
                 // Profile exists - load it
                 DispatchQueue.main.async {
                     self?.userProfile = UserProfile(
@@ -402,6 +413,13 @@ class DataManager: ObservableObject {
     func saveUserProfile() {
         guard let userId = userId else { return }
         
+        let socialLinksData = userProfile.socialLinks.map { link in
+            return [
+                "platform": link.platform.rawValue,
+                "url": link.url
+            ]
+        }
+        
         let profileData: [String: Any] = [
             "name": userProfile.name,
             "bio": userProfile.bio,
@@ -414,7 +432,7 @@ class DataManager: ObservableObject {
             if let error = error {
                 print("Error saving profile: \(error)")
             } else {
-                print("✅ Profile saved successfully")
+                print("Profile saved successfully")
             }
         }
     }
@@ -825,6 +843,7 @@ struct MyEventCard: View {
 struct EventDetailView: View {
     let event: Event
     @Environment(\.dismiss) var dismiss
+    @State private var showingHostProfile = false
     
     var body: some View {
         NavigationView {
@@ -874,8 +893,39 @@ struct EventDetailView: View {
                         
                         DetailRow(icon: "clock.fill", title: "Time",
                                 detail: formatDateRange(start: event.startDate, end: event.endDate))
-                        
-                        DetailRow(icon: "person.fill", title: "Host", detail: event.hostName)
+                                                
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "person.fill")
+                                .font(.body)
+                                .foregroundColor(.blue)
+                                .frame(width: 24)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Host")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text(event.hostName)
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                            }
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                showingHostProfile = true
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text("View Profile")
+                                    Image(systemName: "arrow.right")
+                                }
+                                .font(.caption)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.blue.opacity(0.1))
+                                .foregroundColor(.blue)
+                                .cornerRadius(6)
+                            }
+                        }
                         
                         DetailRow(icon: "phone.fill", title: "Contact", detail: event.hostContact)
                     }
@@ -892,6 +942,9 @@ struct EventDetailView: View {
                         dismiss()
                     }
                 }
+            }
+            .sheet(isPresented: $showingHostProfile) {
+                HostProfileView(hostId: event.hostId)
             }
         }
     }
@@ -1295,6 +1348,259 @@ struct EditProfileFieldView: View {
         }
         dataManager.saveUserProfile()
         dismiss()
+    }
+}
+
+struct HostProfileView: View {
+    let hostId: String
+    @State private var hostProfile: UserProfile?
+    @State private var isLoading = true
+    @Environment(\.dismiss) var dismiss
+    
+    private let db = Firestore.firestore()
+    
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading {
+                    ProgressView("Loading profile...")
+                } else if let profile = hostProfile {
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            VStack(spacing: 12) {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 80))
+                                    .foregroundColor(.blue)
+                                
+                                Text(profile.name.isEmpty ? "Anonymous User" : profile.name)
+                                    .font(.title)
+                                    .fontWeight(.bold)
+                            }
+                            .padding(.top, 20)
+                            
+                            // Show Bio Section
+                            if !profile.bio.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("About")
+                                        .font(.headline)
+                                        .foregroundColor(.secondary)
+                                    
+                                    Text(profile.bio)
+                                        .font(.body)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(12)
+                            }
+                            
+                            // Contact Info
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text("Contact Information")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                                
+                                if !profile.phoneNumber.isEmpty {
+                                    ContactRow(icon: "phone.fill", label: "Phone", value: profile.phoneNumber)
+                                }
+                                
+                                if !profile.email.isEmpty {
+                                    ContactRow(icon: "envelope.fill", label: "Email", value: profile.email)
+                                }
+                                
+                                if profile.phoneNumber.isEmpty && profile.email.isEmpty {
+                                    Text("No contact information available")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                        .italic()
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(12)
+                            
+                            // Social Links
+                            if !profile.socialLinks.isEmpty {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    Text("Social Links")
+                                        .font(.headline)
+                                        .foregroundColor(.secondary)
+                                    
+                                    VStack(spacing: 12) {
+                                        ForEach(profile.socialLinks) { link in
+                                            SocialLinkDisplay(link: link)
+                                        }
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(12)
+                            }
+                            
+                            // Show how long they've been a member
+                            Text("Member since \(formatDate(profile.joinedDate))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                        }
+                        .padding()
+                    }
+                } else {
+                    VStack(spacing: 16) {
+                        Image(systemName: "person.fill.questionmark")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                        
+                        Text("Profile not found")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("Host Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            loadHostProfile()
+        }
+    }
+    
+    private func loadHostProfile() {
+        db.collection("users").document(hostId).getDocument { snapshot, error in
+            isLoading = false
+            
+            if let error = error {
+                print("Error loading host profile: \(error)")
+                return
+            }
+            
+            if let data = snapshot?.data() {
+                // Load user's social links
+                let socialLinksData = data["socialLinks"] as? [[String: String]] ?? []
+                let socialLinks = socialLinksData.compactMap { linkData -> SocialLink? in
+                    guard
+                        let platformString = linkData["platform"],
+                        let platform = SocialLink.SocialPlatform(rawValue: platformString),
+                        let url = linkData["url"]
+                    else { return nil }
+                    
+                    return SocialLink(platform: platform, url: url)
+                }
+                
+                hostProfile = UserProfile(
+                    name: data["name"] as? String ?? "",
+                    bio: data["bio"] as? String ?? "",
+                    phoneNumber: data["phoneNumber"] as? String ?? "",
+                    email: data["email"] as? String ?? "",
+                    joinedDate: (data["joinedDate"] as? Timestamp)?.dateValue() ?? Date(),
+                    socialLinks: socialLinks
+                )
+            }
+        }
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+}
+
+struct ContactRow: View {
+    let icon: String
+    let label: String
+    let value: String
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundColor(.blue)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(label)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(value)
+                    .font(.body)
+            }
+            
+            Spacer()
+            
+            // Copy button
+            Button(action: {
+                UIPasteboard.general.string = value
+            }) {
+                Image(systemName: "doc.on.doc")
+                    .foregroundColor(.blue)
+            }
+        }
+    }
+}
+
+struct SocialLinkDisplay: View {
+    let link: SocialLink
+    
+    var body: some View {
+        Button(action: {
+            openURL(link.url)
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: link.platform.icon)
+                    .font(.title3)
+                    .foregroundColor(link.platform.color)
+                    .frame(width: 32)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(link.platform.rawValue)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Text(link.url)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "arrow.up.right.square")
+                    .font(.caption)
+                    .foregroundColor(.blue)
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+        .padding(12)
+        .background(Color.white)
+        .cornerRadius(8)
+    }
+    
+    private func openURL(_ urlString: String) {
+        var cleanURL = urlString.trimmingCharacters(in: .whitespaces)
+        
+        if !cleanURL.hasPrefix("http://") && !cleanURL.hasPrefix("https://") {
+            cleanURL = "https://" + cleanURL
+        }
+        
+        if let url = URL(string: cleanURL) {
+            #if os(iOS)
+            UIApplication.shared.open(url)
+            #elseif os(macOS)
+            NSWorkspace.shared.open(url)
+            #endif
+        }
     }
 }
 
