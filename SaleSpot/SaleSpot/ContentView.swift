@@ -110,6 +110,7 @@ struct UserProfile: Codable {
     var email: String
     var joinedDate: Date
     var socialLinks: [SocialLink]
+    var profilePictureURL: String?
     
     static let empty = UserProfile(
         name: "",
@@ -117,7 +118,8 @@ struct UserProfile: Codable {
         phoneNumber: "",
         email: "",
         joinedDate: Date(),
-        socialLinks: []
+        socialLinks: [],
+        profilePictureURL: nil
     )
 }
 
@@ -399,7 +401,8 @@ class DataManager: ObservableObject {
                         phoneNumber: data["phoneNumber"] as? String ?? "",
                         email: data["email"] as? String ?? "",
                         joinedDate: (data["joinedDate"] as? Timestamp)?.dateValue() ?? Date(),
-                        socialLinks: [] // Will implement later
+                        socialLinks: [], // Will implement later
+                        profilePictureURL: data["profilePictureURL"] as? String
                     )
                 }
             } else {
@@ -420,13 +423,18 @@ class DataManager: ObservableObject {
             ]
         }
         
-        let profileData: [String: Any] = [
+        var profileData: [String: Any] = [
             "name": userProfile.name,
             "bio": userProfile.bio,
             "phoneNumber": userProfile.phoneNumber,
             "email": userProfile.email,
-            "joinedDate": Timestamp(date: userProfile.joinedDate)
+            "joinedDate": Timestamp(date: userProfile.joinedDate),
+            "socialLinks": socialLinksData
         ]
+        
+        if let profilePictureURL = userProfile.profilePictureURL {
+            profileData["profilePictureURL"] = profilePictureURL
+        }
         
         db.collection("users").document(userId).setData(profileData, merge: true) { error in
             if let error = error {
@@ -1351,6 +1359,33 @@ struct EditProfileFieldView: View {
     }
 }
 
+struct InitialsAvatar: View {
+    let name: String
+    var size: CGFloat = 100
+    
+    private var initials: String {
+        let letters = name
+            .split(separator: " ")
+            .prefix(2)
+            .compactMap { $0.first }
+            .map { String($0) }
+            .joined()
+            .uppercased()
+        return letters.isEmpty ? "?" : letters
+    }
+    
+    var body: some View {
+        Circle()
+            .fill(Color.blue.opacity(0.85))
+            .frame(width: size, height: size)
+            .overlay(
+                Text(initials)
+                    .font(.system(size: size * 0.4, weight: .semibold))
+                    .foregroundColor(.white)
+            )
+    }
+}
+
 struct HostProfileView: View {
     let hostId: String
     @State private var hostProfile: UserProfile?
@@ -1368,9 +1403,7 @@ struct HostProfileView: View {
                     ScrollView {
                         VStack(spacing: 24) {
                             VStack(spacing: 12) {
-                                Image(systemName: "person.circle.fill")
-                                    .font(.system(size: 80))
-                                    .foregroundColor(.blue)
+                                InitialsAvatar(name: profile.name, size: 100)
                                 
                                 Text(profile.name.isEmpty ? "Anonymous User" : profile.name)
                                     .font(.title)
@@ -1870,7 +1903,7 @@ struct ExploreView: View {
 
 struct ProfileView: View {
     @EnvironmentObject var dataManager: DataManager
-    @EnvironmentObject var authManager: AuthManager  // ADD THIS
+    @EnvironmentObject var authManager: AuthManager
     @State private var showingAddLink = false
     @State private var editingField: ProfileField? = nil
     @State private var showingAddEvent = false
@@ -1888,6 +1921,8 @@ struct ProfileView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
+                    InitialsAvatar(name: dataManager.userProfile.name, size: 100)
+                        .padding(.top)
                     // Sign Out Button
                     Button(action: {
                         authManager.signOut()
@@ -2031,7 +2066,7 @@ struct ProfileView: View {
                 EditProfileFieldView(field: field)
             }
             .sheet(isPresented: $showingAddEvent) {
-                            AddEventView()
+                AddEventView()
             }
         }
     }
@@ -2045,7 +2080,6 @@ struct AddEventView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var dataManager: DataManager
     @EnvironmentObject var authManager: AuthManager
-    @EnvironmentObject var locationManager: LocationManager
     
     @State private var title = ""
     @State private var description = ""
@@ -2055,6 +2089,7 @@ struct AddEventView: View {
     @State private var endDate = Date().addingTimeInterval(4 * 3600) // 4 hours later
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var isSaving = false
     
     var body: some View {
         NavigationView {
@@ -2115,7 +2150,7 @@ struct AddEventView: View {
                     Button("Create") {
                         createEvent()
                     }
-                    .disabled(!isFormValid)
+                    .disabled(!isFormValid || isSaving)
                 }
             }
             .alert("Error", isPresented: $showError) {
@@ -2139,26 +2174,37 @@ struct AddEventView: View {
             return
         }
         
-        // Use current location if available, otherwise use Apple Park
-        let eventLocation = locationManager.location ?? CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0090)
+        isSaving = true
         
-        let newEvent = Event(
-            title: title,
-            description: description,
-            location: eventLocation,
-            address: address,
-            startDate: startDate,
-            endDate: endDate,
-            category: selectedCategory,
-            hostId: userId,
-            hostName: dataManager.userProfile.name.isEmpty ? "Anonymous" : dataManager.userProfile.name,
-            hostContact: dataManager.userProfile.phoneNumber,
-            isActive: true,
-            createdDate: Date()
-        )
-        
-        dataManager.addEvent(newEvent)
-        dismiss()
+        CLGeocoder().geocodeAddressString(address) { placemarks, error in
+            DispatchQueue.main.async {
+                isSaving = false
+                
+                guard let coordinate = placemarks?.first?.location?.coordinate else {
+                    errorMessage = "We couldn't find that address. Include the city and state, then try again."
+                    showError = true
+                    return
+                }
+                
+                let newEvent = Event(
+                    title: title,
+                    description: description,
+                    location: coordinate,
+                    address: address,
+                    startDate: startDate,
+                    endDate: endDate,
+                    category: selectedCategory,
+                    hostId: userId,
+                    hostName: dataManager.userProfile.name.isEmpty ? "Anonymous" : dataManager.userProfile.name,
+                    hostContact: dataManager.userProfile.phoneNumber,
+                    isActive: true,
+                    createdDate: Date()
+                )
+                
+                dataManager.addEvent(newEvent)
+                dismiss()
+            }
+        }
     }
 }
 
