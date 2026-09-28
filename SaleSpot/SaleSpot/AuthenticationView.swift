@@ -19,7 +19,10 @@ class AuthManager: ObservableObject {
         self.isAuthenticated = user != nil
         
         _ = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            self?.isAuthenticated = user != nil
+            DispatchQueue.main.async {
+                self?.user = user
+                self?.isAuthenticated = user != nil
+            }
         }
     }
     
@@ -36,7 +39,13 @@ class AuthManager: ObservableObject {
     }
     
     func signOut() {
-        try? Auth.auth().signOut()
+        do {
+            try Auth.auth().signOut()
+            user = nil
+            isAuthenticated = false
+        } catch {
+            print("Sign out failed: \(error.localizedDescription)")
+        }
     }
 }
 

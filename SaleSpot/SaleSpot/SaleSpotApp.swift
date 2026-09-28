@@ -20,17 +20,22 @@ struct SaleSpotApp: App {
     
     var body: some Scene {
         WindowGroup {
-            if authManager.isAuthenticated {
-                ContentView()
-                    .environmentObject(dataManager)
-                    .environmentObject(authManager)
-                    .environmentObject(locationManager)
-            } else {
-                AuthenticationView()
-                    .environmentObject(authManager)
-                    .environmentObject(dataManager)
-                    .environmentObject(locationManager)
-            }
+            RootView()
+                .environmentObject(dataManager)
+                .environmentObject(authManager)
+                .environmentObject(locationManager)
+        }
+    }
+}
+
+struct RootView: View {
+    @EnvironmentObject var authManager: AuthManager
+    
+    var body: some View {
+        if authManager.isAuthenticated {
+            ContentView()
+        } else {
+            AuthenticationView()
         }
     }
 }
