@@ -124,7 +124,7 @@ struct UserProfile: Codable {
 }
 
 struct SocialLink: Identifiable, Codable {
-    let id = UUID()
+    var id = UUID()
     var platform: SocialPlatform
     var url: String
     
@@ -205,7 +205,7 @@ struct SocialLinkRow: View {
             }
         }
         .padding(12)
-        .background(Color.white)
+        .background(Color(.systemBackground))
         .cornerRadius(8)
     }
     
@@ -282,6 +282,7 @@ struct AddSocialLinkView: View {
     private func addLink() {
         let newLink = SocialLink(platform: selectedPlatform, url: urlText)
         dataManager.userProfile.socialLinks.append(newLink)
+        dataManager.saveUserProfile()
         dismiss()
     }
 }
@@ -296,17 +297,18 @@ class DataManager: ObservableObject {
       
     
     init() {
-        Auth.auth().addStateDidChangeListener { [weak self] _, user in
+        _ = Auth.auth().addStateDidChangeListener { [weak self] _, user in
             self?.userId = user?.uid
             if let userId = user?.uid {
                 self?.loadUserProfile(userId: userId)
-            }
-            else {
+                self?.listenToEvents()
+            } else {
                 self?.userProfile = UserProfile.empty
+                self?.eventsListener?.remove()
+                self?.eventsListener = nil
+                self?.events = []
             }
         }
-        
-        listenToEvents()
     }
     
     deinit {
@@ -314,6 +316,7 @@ class DataManager: ObservableObject {
     }
     
     func listenToEvents() {
+        eventsListener?.remove()
         eventsListener = db.collection("events")
             .whereField("isActive", isEqualTo: true)
             .addSnapshotListener { [weak self] snapshot, error in
@@ -381,40 +384,36 @@ class DataManager: ObservableObject {
                 return
             }
             
-            if let data = snapshot?.data() {
-                // Load social links
-                let socialLinksData = data["socialLinks"] as? [[String: String]] ?? []
-                let socialLinks = socialLinksData.compactMap { linkData -> SocialLink? in
-                    guard
-                        let platformString = linkData["platform"],
-                        let platform = SocialLink.SocialPlatform(rawValue: platformString),
-                        let url = linkData["url"]
-                    else { return nil }
-                    
-                    return SocialLink(platform: platform, url: url)
-                }
-                // Profile exists - load it
-                DispatchQueue.main.async {
-                    self?.userProfile = UserProfile(
-                        name: data["name"] as? String ?? "",
-                        bio: data["bio"] as? String ?? "",
-                        phoneNumber: data["phoneNumber"] as? String ?? "",
-                        email: data["email"] as? String ?? "",
-                        joinedDate: (data["joinedDate"] as? Timestamp)?.dateValue() ?? Date(),
-                        socialLinks: [], // Will implement later
-                        profilePictureURL: data["profilePictureURL"] as? String
-                    )
-                }
-            } else {
-                // No profile yet - create empty one
-                self?.userProfile = UserProfile.empty
+            // No document yet (brand-new account): leave the profile alone
+            guard let data = snapshot?.data() else { return }
+            
+            let socialLinksData = data["socialLinks"] as? [[String: String]] ?? []
+            let socialLinks = socialLinksData.compactMap { linkData -> SocialLink? in
+                guard
+                    let platformString = linkData["platform"],
+                    let platform = SocialLink.SocialPlatform(rawValue: platformString),
+                    let url = linkData["url"]
+                else { return nil }
+                return SocialLink(platform: platform, url: url)
+            }
+            
+            DispatchQueue.main.async {
+                self?.userProfile = UserProfile(
+                    name: data["name"] as? String ?? "",
+                    bio: data["bio"] as? String ?? "",
+                    phoneNumber: data["phoneNumber"] as? String ?? "",
+                    email: data["email"] as? String ?? "",
+                    joinedDate: (data["joinedDate"] as? Timestamp)?.dateValue() ?? Date(),
+                    socialLinks: socialLinks,
+                    profilePictureURL: data["profilePictureURL"] as? String
+                )
             }
         }
     }
     
     // Save user profile to Firestore
     func saveUserProfile() {
-        guard let userId = userId else { return }
+        guard let userId = userId ?? Auth.auth().currentUser?.uid else { return }
         
         let socialLinksData = userProfile.socialLinks.map { link in
             return [
@@ -443,84 +442,6 @@ class DataManager: ObservableObject {
                 print("Profile saved successfully")
             }
         }
-    }
-    
-    private func loadSampleData() {
-        let now = Date()
-        let calendar = Calendar.current
-        
-        events = [
-            Event(
-                title: "Garage Sale",
-                description: "Furniture, electronics, and clothing",
-                location: CLLocationCoordinate2D(latitude: 37.3400, longitude: -122.0150),
-                address: "456 Stevens Creek Blvd, Cupertino, CA",
-                startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
-                endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
-                category: .garageSale,
-                hostId: "sample",
-                hostName: "John Doe",
-                hostContact: "123-456-7890",
-                isActive: true,
-                createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
-            ),
-            Event(
-                title: "Block Sale",
-                description: "Toys, food, gardening supplies",
-                location: CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0090),
-                address: "Apple Park, Cupertino, CA",
-                startDate: calendar.date(byAdding: .hour, value: 1, to: now) ?? now,
-                endDate: calendar.date(byAdding: .hour, value: 3, to: now) ?? now,
-                category: .blockSale,
-                hostId: "sample",
-                hostName: "Jane Doe",
-                hostContact: "123-670-7890",
-                isActive: true,
-                createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
-            ),
-            Event(
-                title: "Garage Sale",
-                description: "Furniture, electronics, and clothing",
-                location: CLLocationCoordinate2D(latitude: 37.3300, longitude: -122.0030),
-                address: "789 De Anza Blvd, Cupertino, CA",
-                startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
-                endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
-                category: .garageSale,
-                hostId: "sample",
-                hostName: "John Doe",
-                hostContact: "123-456-7890",
-                isActive: true,
-                createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
-            ),
-            Event(
-                title: "Garage Sale",
-                description: "Furniture, electronics, and clothing",
-                location: CLLocationCoordinate2D(latitude: 37.3380, longitude: -122.0050),
-                address: "Elm Street, Cupertino, CA",
-                startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
-                endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
-                category: .garageSale,
-                hostId: "sample",
-                hostName: "John Doe",
-                hostContact: "123-456-7890",
-                isActive: true,
-                createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
-            ),
-            Event(
-                title: "Estate Sale",
-                description: "Furniture, electronics, and clothing",
-                location: CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0080),
-                address: "321 Homestead Rd, Cupertino, CA",
-                startDate: calendar.date(byAdding: .hour, value: -2, to: now) ?? now,
-                endDate: calendar.date(byAdding: .hour, value: 4, to: now) ?? now,
-                category: .garageSale,
-                hostId: "sample",
-                hostName: "John Doe",
-                hostContact: "123-456-7890",
-                isActive: true,
-                createdDate: calendar.date(byAdding: .day, value: -3, to: now) ?? now
-            )
-        ]
     }
     
     func addEvent(_ event: Event) {
@@ -831,7 +752,7 @@ struct MyEventCard: View {
             }
         }
         .padding()
-        .background(Color.white)
+        .background(Color(.systemBackground))
         .cornerRadius(10)
         .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
         .sheet(isPresented: $showingDetail) {
@@ -1071,7 +992,7 @@ struct MapStatsBar: View {
             Spacer()
         }
         .padding()
-        .background(Color.white)
+        .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
@@ -1199,7 +1120,7 @@ struct MapEventCard: View {
             }
             .padding()
         }
-        .background(Color.white)
+        .background(Color(.systemBackground))
         .cornerRadius(20, corners: [.topLeft, .topRight])
         .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: -5)
         .sheet(isPresented: $showingFullDetail) {
@@ -1271,7 +1192,7 @@ struct ProfileRow: View {
             }
         }
         .padding()
-        .background(Color.white)
+        .background(Color(.systemBackground))
         .cornerRadius(8)
     }
 }
@@ -1616,7 +1537,7 @@ struct SocialLinkDisplay: View {
         }
         .buttonStyle(PlainButtonStyle())
         .padding(12)
-        .background(Color.white)
+        .background(Color(.systemBackground))
         .cornerRadius(8)
     }
     
@@ -1673,32 +1594,30 @@ struct ContentView: View {
 }
 
 struct MapView: View {
-    @StateObject private var locationManager = LocationManager()
+    @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var dataManager: DataManager
     
-    @State private var position: MapCameraPosition = .region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.0090),
-            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-        )
-    )
+    @State private var position: MapCameraPosition = .automatic
+    @State private var hasCenteredOnUser = false
     
     @State private var selectedEvent: Event?
     
     // Find events within radius
     var nearbyEvents: [Event] {
-        guard let userLocation = locationManager.location else {
-            // Show all events if no location
-            return dataManager.events
-        }
-        
-        // Show events within 10 miles
-        let radiusMiles = 10.0
-        
-        return dataManager.events.filter { event in
-            let distance = distanceBetween(userLocation, event.location)
-            return distance <= radiusMiles
-        }
+        let activeEvents = dataManager.events.filter { !$0.hasEnded }
+        guard let userLocation = locationManager.location else { return activeEvents }
+        return activeEvents.filter { distanceBetween(userLocation, $0.location) <= 10.0 }
+    }
+    
+    private func centerOnUserIfNeeded(_ coordinate: CLLocationCoordinate2D?) {
+        guard !hasCenteredOnUser, let coordinate = coordinate else { return }
+        hasCenteredOnUser = true
+        position = .region(
+            MKCoordinateRegion(
+                center: coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            )
+        )
     }
     
     var body: some View {
@@ -1717,6 +1636,10 @@ struct MapView: View {
                                 }
                         }
                     }
+                }
+                .mapControls {
+                    MapUserLocationButton()
+                    MapCompass()
                 }
                 .ignoresSafeArea()
                 
@@ -1743,27 +1666,9 @@ struct MapView: View {
             }
             .navigationTitle("Map")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                if let userLocation = locationManager.location {
-                    position = .region(
-                        MKCoordinateRegion(
-                            center: userLocation,
-                            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-                        )
-                    )
-                }
-            }
-            .onChange(of: locationManager.location) { _, newValue in
-                if let newValue = newValue, selectedEvent == nil {
-                    withAnimation {
-                        position = .region(
-                            MKCoordinateRegion(
-                                center: newValue,
-                                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-                            )
-                        )
-                    }
-                }
+            .onAppear { centerOnUserIfNeeded(locationManager.location) }
+            .onChange(of: locationManager.location) { _, newLocation in
+                centerOnUserIfNeeded(newLocation)
             }
         }
     }
@@ -1784,7 +1689,7 @@ struct ExploreView: View {
     }
     
     var filteredAndSortedEvents: [Event] {
-        var events = dataManager.searchEvents(searchText)
+        var events = dataManager.searchEvents(searchText).filter { !$0.hasEnded }
         
         if let category = selectedCategoryFilter {
             events = events.filter { $0.category == category }
@@ -2073,6 +1978,7 @@ struct ProfileView: View {
     
     private func deleteSocialLink(_ link: SocialLink) {
         dataManager.userProfile.socialLinks.removeAll { $0.id == link.id }
+        dataManager.saveUserProfile()
     }
 }
 
@@ -2090,6 +1996,7 @@ struct AddEventView: View {
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var isSaving = false
+    
     
     var body: some View {
         NavigationView {
@@ -2164,7 +2071,8 @@ struct AddEventView: View {
     private var isFormValid: Bool {
         !title.isEmpty &&
         !description.isEmpty &&
-        !address.isEmpty
+        !address.isEmpty &&
+        endDate > startDate
     }
     
     private func createEvent() {
