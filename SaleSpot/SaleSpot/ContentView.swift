@@ -873,6 +873,18 @@ struct EventDetailView: View {
                         }
                         
                         DetailRow(icon: "phone.fill", title: "Contact", detail: event.hostContact)
+                        Button(action: openDirections) {
+                            HStack {
+                                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                                Text("Get Directions")
+                                    .fontWeight(.medium)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
                     }
                     
                     Spacer()
@@ -902,6 +914,14 @@ struct EventDetailView: View {
         formatter.dateStyle = .none
         let endStr = formatter.string(from: end)
         return "\(startStr) - \(endStr)"
+    }
+    
+    private func openDirections() {
+        let item = MKMapItem(placemark: MKPlacemark(coordinate: event.location))
+        item.name = event.title
+        item.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+        ])
     }
 }
 
