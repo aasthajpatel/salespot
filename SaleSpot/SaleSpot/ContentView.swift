@@ -692,6 +692,7 @@ struct MyEventCard: View {
     @EnvironmentObject var dataManager: DataManager
     @State private var showingDetail = false
     @State private var showingDeleteAlert = false
+    @State private var showingEdit = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -741,6 +742,18 @@ struct MyEventCard: View {
                         .cornerRadius(6)
                 }
                 
+                Button(action: {
+                    showingEdit = true
+                }) {
+                    Text("Edit")
+                        .font(.caption)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.orange.opacity(0.1))
+                        .foregroundColor(.orange)
+                        .cornerRadius(6)
+                }
+                
                 Spacer()
                 
                 Button(action: {
@@ -757,6 +770,9 @@ struct MyEventCard: View {
         .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
         .sheet(isPresented: $showingDetail) {
             EventDetailView(event: event)
+        }
+        .sheet(isPresented: $showingEdit) {
+            AddEventView(eventToEdit: event)
         }
         .alert("Delete Event", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) {}
@@ -1997,6 +2013,17 @@ struct AddEventView: View {
     @State private var errorMessage = ""
     @State private var isSaving = false
     
+    var eventToEdit: Event? = nil
+
+    init(eventToEdit: Event? = nil) {
+        self.eventToEdit = eventToEdit
+        _title = State(initialValue: eventToEdit?.title ?? "")
+        _description = State(initialValue: eventToEdit?.description ?? "")
+        _address = State(initialValue: eventToEdit?.address ?? "")
+        _selectedCategory = State(initialValue: eventToEdit?.category ?? .garageSale)
+        _startDate = State(initialValue: eventToEdit?.startDate ?? Date())
+        _endDate = State(initialValue: eventToEdit?.endDate ?? Date().addingTimeInterval(4 * 3600))
+    }
     
     var body: some View {
         NavigationView {
@@ -2044,7 +2071,7 @@ struct AddEventView: View {
                     }
                 }
             }
-            .navigationTitle("Create Event")
+            .navigationTitle(eventToEdit == nil ? "Create Event" : "Edit Event")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -2054,7 +2081,7 @@ struct AddEventView: View {
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
+                    Button(eventToEdit == nil ? "Create" : "Save") {
                         createEvent()
                     }
                     .disabled(!isFormValid || isSaving)
@@ -2095,6 +2122,7 @@ struct AddEventView: View {
                 }
                 
                 let newEvent = Event(
+                    id: eventToEdit?.id ?? UUID(),
                     title: title,
                     description: description,
                     location: coordinate,
@@ -2106,7 +2134,7 @@ struct AddEventView: View {
                     hostName: dataManager.userProfile.name.isEmpty ? "Anonymous" : dataManager.userProfile.name,
                     hostContact: dataManager.userProfile.phoneNumber,
                     isActive: true,
-                    createdDate: Date()
+                    createdDate: eventToEdit?.createdDate ?? Date()
                 )
                 
                 dataManager.addEvent(newEvent)

@@ -47,6 +47,12 @@ class AuthManager: ObservableObject {
             print("Sign out failed: \(error.localizedDescription)")
         }
     }
+    
+    func resetPassword(email: String, completion: @escaping (Error?) -> Void) {
+        Auth.auth().sendPasswordReset(withEmail: email) { error in
+            DispatchQueue.main.async { completion(error) }
+        }
+    }
 }
 
 // Authentication View
@@ -59,6 +65,8 @@ struct AuthenticationView: View {
     @State private var showError = false
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var dataManager: DataManager
+    @State private var showResetAlert = false
+    @State private var resetMessage = ""
     
     var body: some View {
         VStack(spacing: 20) {
@@ -122,6 +130,14 @@ struct AuthenticationView: View {
                     .foregroundColor(.blue)
             }
             
+            if !isSignUp {
+                Button("Forgot password?") {
+                    sendReset()
+                }
+                .font(.subheadline)
+                .foregroundColor(.blue)
+            }
+            
             // Error Message
             if showError {
                 Text(errorMessage)
@@ -138,6 +154,12 @@ struct AuthenticationView: View {
             }
         } message: {
             Text(errorMessage)
+        }
+        
+        .alert("Password Reset", isPresented: $showResetAlert) {
+            Button("OK") {}
+        } message: {
+            Text(resetMessage)
         }
     }
     
@@ -163,6 +185,23 @@ struct AuthenticationView: View {
                     showError = true
                 }
             }
+        }
+    }
+    
+    private func sendReset() {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanEmail.isEmpty else {
+            resetMessage = "Enter your email in the field above first."
+            showResetAlert = true
+            return
+        }
+        authManager.resetPassword(email: cleanEmail) { error in
+            if let error = error {
+                resetMessage = error.localizedDescription
+            } else {
+                resetMessage = "If an account exists for that email, a reset link is on its way."
+            }
+            showResetAlert = true
         }
     }
 }
